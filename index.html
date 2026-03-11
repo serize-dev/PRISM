@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P.R.I.S.M. — Pipeline for Real-time Infection Signal Mining</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ========== WHITE THEME VARIABLES ========== */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-hover: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --accent: #0369a1;
+  --accent-dim: rgba(3, 105, 161, 0.07);
+  --accent-fire: #c2410c;
+  --accent-fire-bg: rgba(194, 65, 12, 0.06);
+  --accent-smoke: #64748b;
+  --accent-smoke-bg: rgba(100, 116, 139, 0.06);
+  --accent-green: #047857;
+  --accent-red: #b91c1c;
+  --accent-purple: #6d28d9;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --radius: 8px;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+/* ========== RESET & SHELL ========== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-primary);line-height:1.5}
+.app{display:flex;flex-direction:column;height:100vh}
+
+/* ========== TOP BAR ========== */
+.top-bar{
+  height:44px;flex-shrink:0;display:flex;align-items:center;padding:0 14px;
+  background:var(--bg-secondary);border-bottom:1px solid var(--border);gap:12px;z-index:10;
+}
+.tb-logo{font-size:0.88rem;font-weight:800;letter-spacing:3px;color:var(--accent);flex-shrink:0}
+.tb-tagline{font-size:0.62rem;color:var(--text-muted);flex-shrink:0}
+.tb-tagline em{color:var(--accent-fire);font-style:normal;font-weight:600}
+.tb-tagline .sk{color:var(--accent-smoke);font-weight:600}
+.tb-search{display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:1;min-width:0}
+.tb-search input{
+  width:240px;padding:5px 10px;background:var(--bg-primary);border:1px solid var(--border);
+  border-radius:4px;color:var(--text-primary);font-family:var(--font-mono);font-size:0.68rem;outline:none;
+}
+.tb-search input:focus{border-color:var(--accent)}
+.tb-btn{
+  padding:5px 14px;background:var(--accent);border:none;border-radius:4px;
+  color:#fff;font-family:var(--font-sans);font-size:0.66rem;font-weight:600;cursor:pointer;white-space:nowrap;
+}
+.tb-btn:hover{opacity:0.9}
+.tb-agents{display:flex;gap:10px;flex-shrink:0}
+.ag{display:flex;align-items:center;gap:4px;font-size:0.6rem;color:var(--text-muted);white-space:nowrap}
+.ag-dot{width:6px;height:6px;border-radius:50%;background:var(--text-muted);transition:all 0.3s}
+.ag.active{color:var(--accent)}.ag.active .ag-dot{background:var(--accent);box-shadow:0 0 4px var(--accent);animation:pulse 1.5s ease-in-out infinite}
+.ag.complete{color:var(--accent-green)}.ag.complete .ag-dot{background:var(--accent-green)}
+.ag.error .ag-dot{background:var(--accent-red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* ========== MAIN AREA ========== */
+.main-area{flex:1;display:flex;overflow:hidden}
+
+/* ========== RESIZE HANDLE ========== */
+.resize-handle{width:3px;flex-shrink:0;cursor:col-resize;background:var(--border);transition:background 0.2s}
+.resize-handle:hover,.resize-handle.dragging{background:var(--accent)}
+
+/* ========== SHARED PANEL ========== */
+.panel-head{
+  height:34px;display:flex;align-items:center;padding:0 14px;
+  font-size:0.66rem;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;
+  color:var(--text-secondary);background:var(--bg-tertiary);border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.panel-head .ph-count{margin-left:auto;font-family:var(--font-mono);color:var(--text-muted);font-weight:400}
+.panel-body{flex:1;overflow-y:auto;overflow-x:hidden}
+.panel-body::-webkit-scrollbar{width:5px}
+.panel-body::-webkit-scrollbar-track{background:transparent}
+.panel-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ========== LEFT PANEL ========== */
+.left-panel{width:320px;flex-shrink:0;display:flex;flex-direction:column;background:var(--bg-secondary);border-right:1px solid var(--border)}
+
+/* Accordion */
+.acc-section{border-bottom:1px solid var(--border)}
+.acc-toggle{
+  width:100%;padding:10px 14px;display:flex;align-items:center;gap:8px;
+  background:transparent;border:none;cursor:pointer;font-family:var(--font-sans);
+  font-size:0.7rem;font-weight:600;color:var(--text-secondary);text-align:left;
+}
+.acc-toggle:hover{background:var(--bg-hover)}
+.acc-toggle .acc-icon{font-size:0.85rem}
+.acc-toggle .acc-count{margin-left:auto;font-family:var(--font-mono);font-size:0.6rem;color:var(--text-muted)}
+.acc-toggle .acc-arrow{font-size:0.5rem;transition:transform 0.2s;margin-left:4px}
+.acc-toggle.open .acc-arrow{transform:rotate(180deg)}
+.acc-body{display:none;max-height:400px;overflow-y:auto}
+.acc-body.open{display:block}
+.acc-body::-webkit-scrollbar{width:4px}
+.acc-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* Refs */
+.ref-group{padding:8px 14px;border-bottom:1px solid var(--bg-tertiary)}
+.ref-marker{font-size:0.72rem;font-weight:600;color:var(--text-primary);margin-bottom:2px}
+.ref-note{font-size:0.62rem;color:var(--text-muted);margin-bottom:4px;line-height:1.5}
+.ref-link{display:block;font-size:0.64rem;color:var(--accent);text-decoration:none;padding:2px 0}
+.ref-link:hover{text-decoration:underline}
+.ref-empty{padding:16px 14px;font-size:0.72rem;color:var(--text-muted);text-align:center}
+
+/* Feed items */
+.feed-item{padding:7px 14px;transition:background 0.15s}
+.feed-item:hover{background:var(--bg-hover)}
+.feed-item-title{font-size:0.7rem;font-weight:500;color:var(--text-primary);line-height:1.4;margin-bottom:1px}
+.feed-item-title a{color:inherit;text-decoration:none}.feed-item-title a:hover{color:var(--accent)}
+.feed-item-meta{font-size:0.6rem;color:var(--text-muted)}
+.feed-loading,.feed-error{padding:20px 14px;text-align:center;font-size:0.72rem;color:var(--text-muted)}
+.feed-error{color:var(--accent-red)}
+.geo-dataset{padding:7px 14px;transition:background 0.15s}
+.geo-dataset:hover{background:var(--bg-hover)}
+.geo-title{font-size:0.7rem;font-weight:500;color:var(--text-primary);line-height:1.4;margin-bottom:1px}
+.geo-title a{color:inherit;text-decoration:none}.geo-title a:hover{color:var(--accent)}
+.geo-meta{font-size:0.6rem;color:var(--text-muted);margin-bottom:1px}
+.geo-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
+.geo-tag{font-size:0.54rem;padding:1px 6px;border-radius:8px;background:var(--accent-dim);color:var(--accent);font-weight:500}
+
+/* STRING */
+.string-wrap{padding:12px;text-align:center;min-height:200px;display:flex;align-items:center;justify-content:center}
+.string-wrap img{max-width:100%;max-height:320px;border-radius:6px}
+.string-placeholder{color:var(--text-muted);font-size:0.72rem;padding:20px}
+
+/* Pipeline sources (compact in left panel) */
+.src-mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px 14px}
+.src-mini{text-align:center;padding:6px 4px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;font-size:0.55rem}
+.src-mini.streaming{border-color:var(--accent)}
+.src-mini-icon{font-size:0.9rem}
+.src-mini-status{font-family:var(--font-mono);color:var(--text-muted);margin-top:1px}
+.src-mini.streaming .src-mini-status{color:var(--accent)}
+
+/* ========== CENTER PANEL ========== */
+.center-panel{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg-primary)}
+.tab-bar{display:flex;background:var(--bg-secondary);border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{
+  padding:8px 16px;font-size:0.68rem;font-weight:500;color:var(--text-muted);
+  background:transparent;border:none;border-bottom:2px solid transparent;
+  cursor:pointer;font-family:var(--font-sans);transition:all 0.2s;white-space:nowrap;
+}
+.tab:hover{color:var(--text-secondary)}.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-pane{display:none;flex:1;overflow:hidden}
+.tab-pane.active{display:flex;flex-direction:column}
+
+/* R Sandbox */
+.sandbox-container{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.sandbox-toolbar{
+  display:flex;align-items:center;padding:6px 12px;gap:8px;
+  background:var(--bg-tertiary);border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.sandbox-toolbar span{font-size:0.68rem;font-weight:600;color:var(--text-secondary)}
+.r-status{font-size:0.6rem;color:var(--text-muted);margin-left:auto;font-family:var(--font-mono)}
+.r-status.ready{color:var(--accent-green)}
+.r-status.loading{color:var(--accent)}
+.run-btn{
+  padding:4px 14px;background:var(--accent-green);border:none;border-radius:4px;
+  color:#fff;font-size:0.64rem;font-weight:600;cursor:pointer;font-family:var(--font-sans);
+}
+.run-btn:disabled{opacity:0.4;cursor:not-allowed}
+.run-btn:not(:disabled):hover{opacity:0.9}
+.activate-btn{
+  padding:4px 14px;background:var(--accent);border:none;border-radius:4px;
+  color:#fff;font-size:0.64rem;font-weight:600;cursor:pointer;font-family:var(--font-sans);
+}
+.r-editor{
+  flex:1;min-height:120px;resize:none;outline:none;padding:14px;
+  font-family:var(--font-mono);font-size:0.78rem;line-height:1.6;
+  background:var(--bg-secondary);color:var(--text-primary);
+  border:none;border-bottom:1px solid var(--border);
+}
+.r-editor::placeholder{color:var(--text-muted)}
+.console-header{
+  display:flex;align-items:center;padding:4px 12px;
+  background:#1e293b;border-bottom:1px solid #334155;flex-shrink:0;
+}
+.console-header span{font-size:0.62rem;font-weight:600;color:#94a3b8;letter-spacing:1px;text-transform:uppercase}
+.r-console{
+  flex:1;min-height:100px;overflow-y:auto;padding:10px 14px;
+  font-family:var(--font-mono);font-size:0.72rem;line-height:1.6;
+  background:#0f172a;color:#e2e8f0;white-space:pre-wrap;word-break:break-word;
+}
+.r-console::-webkit-scrollbar{width:5px}
+.r-console::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}
+.r-console .r-err{color:#fca5a5}
+.r-console .r-info{color:#94a3b8}
+
+/* Analysis pane */
+.analysis-body{flex:1;overflow-y:auto;padding:20px}
+.analysis-body::-webkit-scrollbar{width:5px}
+.analysis-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.gp-section{background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:all 0.4s}
+.gp-section.achieved{border-color:var(--accent-fire);box-shadow:0 0 0 1px var(--accent-fire)}
+.gp-title{font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--text-secondary);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.gp-grid{display:grid;grid-template-columns:1fr 240px;gap:16px}
+.gp-grid .prob-engine{grid-column:1/-1}
+.gp-empty{grid-column:1/-1;text-align:center;padding:36px 16px;color:var(--text-muted);font-size:0.8rem}
+.gp-empty-icon{font-size:1.6rem;margin-bottom:6px;opacity:0.5}
+.roc-panel canvas{max-height:300px;width:100%}
+.metrics-panel{display:flex;flex-direction:column;gap:6px}
+.metric-card{padding:8px 12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;display:flex;justify-content:space-between;align-items:center}
+.metric-label{font-size:0.62rem;font-weight:500;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px}
+.metric-value{font-family:var(--font-mono);font-size:1rem;font-weight:600;color:var(--accent)}
+.prob-engine{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.prob-engine h3{width:100%;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:var(--text-secondary)}
+.prob-left{flex:1;min-width:200px}.prob-right{width:130px;text-align:center}
+.slider-group label{display:flex;justify-content:space-between;font-size:0.68rem;color:var(--text-secondary);margin-bottom:4px}
+.slider-group label span{font-family:var(--font-mono);font-weight:600;color:var(--accent)}
+input[type="range"]{width:100%;height:4px;-webkit-appearance:none;appearance:none;background:var(--border);border-radius:2px;outline:none}
+input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer}
+.post-test-results{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.post-test-card{padding:8px 12px;border-radius:6px;display:flex;justify-content:space-between;align-items:center}
+.post-test-card.positive{background:var(--accent-fire-bg);border:1px solid rgba(194,65,12,0.15)}
+.post-test-card.negative{background:rgba(4,120,87,0.05);border:1px solid rgba(4,120,87,0.15)}
+.post-label{font-size:0.64rem;font-weight:500;color:var(--text-secondary)}
+.post-value{font-family:var(--font-mono);font-size:0.95rem;font-weight:600}
+.post-test-card.positive .post-value{color:var(--accent-fire)}
+.post-test-card.negative .post-value{color:var(--accent-green)}
+.fire-gauge-wrap canvas{max-height:80px}
+.gauge-value{font-family:var(--font-mono);font-size:1.2rem;font-weight:700;margin-top:-6px}
+.gauge-label{font-size:0.56rem;text-transform:uppercase;letter-spacing:2px;color:var(--text-muted)}
+
+/* ========== RIGHT PANEL ========== */
+.right-panel{width:300px;flex-shrink:0;display:flex;flex-direction:column;background:var(--bg-secondary);border-left:1px solid var(--border)}
+.filter-bar{display:flex;padding:6px 8px;gap:4px;border-bottom:1px solid var(--border);flex-shrink:0}
+.fbtn{
+  flex:1;padding:4px 0;font-size:0.58rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;
+  background:transparent;border:1px solid transparent;border-radius:4px;color:var(--text-muted);
+  cursor:pointer;font-family:var(--font-sans);transition:all 0.2s;
+}
+.fbtn:hover{color:var(--text-secondary)}.fbtn.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
+.biomarker-card{
+  position:relative;padding:10px 12px 10px 14px;margin:4px 6px;
+  background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;
+  cursor:pointer;transition:all 0.2s;overflow:hidden;
+}
+.biomarker-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px 0 0 3px}
+.biomarker-card[data-type="fire"]::before{background:var(--accent-fire)}
+.biomarker-card[data-type="smoke"]::before{background:var(--accent-smoke)}
+.biomarker-card[data-type="mixed"]::before{background:linear-gradient(180deg,var(--accent-fire),var(--accent-smoke))}
+.biomarker-card:hover{background:var(--bg-hover);border-color:var(--border-strong)}
+.biomarker-card.selected{border-color:var(--accent);background:var(--accent-dim)}
+.biomarker-card.selected .bm-check{opacity:1}
+.bm-check{position:absolute;top:6px;right:8px;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:0.55rem;font-weight:700;background:var(--accent);color:#fff;border-radius:50%;opacity:0;transition:opacity 0.2s}
+.bm-row1{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+.bm-abbrev{font-family:var(--font-mono);font-size:0.78rem;font-weight:600}
+.bm-type-badge{font-size:0.5rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;padding:1px 6px;border-radius:8px}
+.bm-type-badge.fire{background:var(--accent-fire-bg);color:var(--accent-fire)}
+.bm-type-badge.smoke{background:var(--accent-smoke-bg);color:var(--accent-smoke)}
+.bm-type-badge.mixed{background:rgba(109,40,217,0.06);color:var(--accent-purple)}
+.bm-name{font-size:0.6rem;color:var(--text-secondary);margin-bottom:3px}
+.bm-stats-row{font-family:var(--font-mono);font-size:0.58rem;color:var(--text-muted);margin-bottom:3px}
+.bm-fire-mini{height:3px;border-radius:2px;background:var(--bg-tertiary);overflow:hidden}
+.bm-fire-mini-fill{height:100%;border-radius:2px}
+
+/* ========== STATUS BAR ========== */
+.status-bar{
+  height:22px;flex-shrink:0;display:flex;align-items:center;padding:0 14px;
+  background:var(--accent);font-size:0.58rem;color:rgba(255,255,255,0.85);gap:16px;
+}
+.status-bar .sb-right{margin-left:auto;opacity:0.7}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOP BAR -->
+  <header class="top-bar">
+    <span class="tb-logo">P.R.I.S.M.</span>
+    <span class="tb-tagline">Separating <em>Fire</em> from <span class="sk">Smoke</span></span>
+    <div class="tb-search">
+      <input type="text" id="searchQuery" placeholder="neonatal sepsis biomarker" value="neonatal sepsis biomarker">
+      <button class="tb-btn" onclick="runPipeline()">Stream</button>
+    </div>
+    <div class="tb-agents">
+      <div class="ag" id="agent-lit"><span class="ag-dot"></span> Lit</div>
+      <div class="ag" id="agent-trials"><span class="ag-dot"></span> Trials</div>
+      <div class="ag" id="agent-analyst"><span class="ag-dot"></span> Analyst</div>
+      <div class="ag" id="agent-bayesian"><span class="ag-dot"></span> Bayes</div>
+    </div>
+  </header>
+
+  <div class="main-area">
+    <!-- LEFT PANEL: Literature / Feeds -->
+    <aside class="left-panel" id="leftPanel">
+      <div class="panel-head">Literature & Data <span class="ph-count" id="contextLabel"></span></div>
+      <div class="panel-body">
+
+        <div class="acc-section">
+          <button class="acc-toggle open" onclick="toggleAcc(this)">
+            <span class="acc-icon">📖</span> Key References <span class="acc-count" id="refCount"></span><span class="acc-arrow">▼</span>
+          </button>
+          <div class="acc-body open" id="refsPanel">
+            <div class="ref-empty">Select biomarkers to see their source references</div>
+          </div>
+        </div>
+
+        <div class="acc-section">
+          <button class="acc-toggle open" onclick="toggleAcc(this)">
+            <span class="acc-icon">📚</span> PubMed <span class="acc-count" id="pubmedCount"></span><span class="acc-arrow">▼</span>
+          </button>
+          <div class="acc-body open" id="pubmedFeed">
+            <div class="feed-loading">Hit Stream to search PubMed...</div>
+          </div>
+        </div>
+
+        <div class="acc-section">
+          <button class="acc-toggle" onclick="toggleAcc(this)">
+            <span class="acc-icon">🔬</span> ClinicalTrials.gov <span class="acc-count" id="trialsCount"></span><span class="acc-arrow">▼</span>
+          </button>
+          <div class="acc-body" id="trialsFeed">
+            <div class="feed-loading">Hit Stream to search trials...</div>
+          </div>
+        </div>
+
+        <div class="acc-section">
+          <button class="acc-toggle" onclick="toggleAcc(this)">
+            <span class="acc-icon">📊</span> GEO Datasets <span class="acc-count" id="geoCount"></span><span class="acc-arrow">▼</span>
+          </button>
+          <div class="acc-body" id="geoFeed">
+            <div class="feed-loading">Hit Stream to search GEO...</div>
+          </div>
+        </div>
+
+        <div class="acc-section">
+          <button class="acc-toggle" onclick="toggleAcc(this)">
+            <span class="acc-icon">🕸️</span> STRING Network <span class="acc-count" id="stringCount"></span><span class="acc-arrow">▼</span>
+          </button>
+          <div class="acc-body" id="stringSection">
+            <div class="string-wrap" id="stringPanel">
+              <div class="string-placeholder">Select 2+ biomarkers</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="acc-section">
+          <button class="acc-toggle" onclick="toggleAcc(this)">
+            <span class="acc-icon">⚡</span> Pipeline Status <span class="acc-arrow">▼</span>
+          </button>
+          <div class="acc-body">
+            <div class="src-mini-grid">
+              <div class="src-mini" id="src-pubmed"><div class="src-mini-icon">📚</div><div class="src-mini-status" id="status-pubmed">—</div></div>
+              <div class="src-mini" id="src-trials"><div class="src-mini-icon">🔬</div><div class="src-mini-status" id="status-trials">—</div></div>
+              <div class="src-mini" id="src-epmc"><div class="src-mini-icon">🌍</div><div class="src-mini-status" id="status-epmc">—</div></div>
+              <div class="src-mini" id="src-uniprot"><div class="src-mini-icon">🧬</div><div class="src-mini-status" id="status-uniprot">—</div></div>
+              <div class="src-mini" id="src-geo"><div class="src-mini-icon">📊</div><div class="src-mini-status" id="status-geo">—</div></div>
+              <div class="src-mini" id="src-string"><div class="src-mini-icon">🕸️</div><div class="src-mini-status" id="status-string">—</div></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <div class="resize-handle" data-target="left"></div>
+
+    <!-- CENTER PANEL -->
+    <main class="center-panel">
+      <div class="tab-bar">
+        <button class="tab active" onclick="switchTab('center',this,'ctab-sandbox')">R Sandbox</button>
+        <button class="tab" onclick="switchTab('center',this,'ctab-analysis')">Analysis</button>
+      </div>
+
+      <!-- R SANDBOX TAB -->
+      <div class="tab-pane active" id="ctab-sandbox">
+        <div class="sandbox-container">
+          <div class="sandbox-toolbar">
+            <span>R Code</span>
+            <button class="run-btn" id="runBtn" onclick="executeR()" disabled>Run</button>
+            <button class="activate-btn" id="activateBtn" onclick="initWebR()">Activate R Runtime</button>
+            <span class="r-status" id="rStatus">R not loaded</span>
+          </div>
+          <textarea class="r-editor" id="rEditor" placeholder="# Activate R runtime, then write code here...
+# Selected biomarkers auto-sync as 'markers' data frame">
+# P.R.I.S.M. — R Sandbox
+# Select biomarkers in the right panel, then click Run.
+# Your selected markers are available as the 'markers' data frame.
+
+# View loaded markers
+print(markers)
+
+# Combined d' under binormal model (independence assumed)
+d_combined <- sqrt(sum(markers$da^2))
+auc_combined <- pnorm(d_combined / sqrt(2))
+
+cat("\n=== Composite Biomarker Performance ===\n")
+cat("Combined d':", round(d_combined, 3), "\n")
+cat("Combined AUC:", round(auc_combined, 4), "\n")
+
+# Optimal operating point
+opt_sn <- pnorm(d_combined / 2)
+opt_sp <- pnorm(d_combined / 2)
+cat("Sensitivity:", round(opt_sn * 100, 1), "%\n")
+cat("Specificity:", round(opt_sp * 100, 1), "%\n")
+
+# Likelihood ratios
+lr_pos <- opt_sn / (1 - opt_sp)
+lr_neg <- (1 - opt_sn) / opt_sp
+cat("LR+:", round(lr_pos, 2), "\n")
+cat("LR-:", round(lr_neg, 4), "\n")
+
+# Fire score assessment
+cat("\n=== Fire Score ===\n")
+cat("Avg fire score:", round(mean(markers$fire_score), 1), "/100\n")
+cat("Classification:", ifelse(mean(markers$fire_score) > 50, "FIRE-dominant", "SMOKE-dominant"), "\n")
+</textarea>
+          <div class="console-header"><span>Console</span></div>
+          <div class="r-console" id="rConsole"><span class="r-info">Click "Activate R Runtime" to initialize WebR (~20MB download, cached after first load).\nOnce ready, selected biomarkers will auto-sync as the 'markers' data frame.</span></div>
+        </div>
+      </div>
+
+      <!-- ANALYSIS TAB -->
+      <div class="tab-pane" id="ctab-analysis">
+        <div class="analysis-body">
+          <div class="gp-section" id="godParticle">
+            <div class="gp-title">The God Particle</div>
+            <div class="gp-grid" id="gpGrid">
+              <div class="gp-empty"><div class="gp-empty-icon">🔬</div>Select biomarkers to begin composite analysis</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div class="resize-handle" data-target="right"></div>
+
+    <!-- RIGHT PANEL: Biomarker Modifiers -->
+    <aside class="right-panel" id="rightPanel">
+      <div class="panel-head">Biomarkers <span class="ph-count" id="selectedCount">0 selected</span></div>
+      <div class="filter-bar">
+        <button class="fbtn active" onclick="filterMarkers('all',this)">All</button>
+        <button class="fbtn" onclick="filterMarkers('fire',this)">Fire</button>
+        <button class="fbtn" onclick="filterMarkers('smoke',this)">Smoke</button>
+        <button class="fbtn" onclick="filterMarkers('mixed',this)">Mixed</button>
+      </div>
+      <div class="panel-body" id="biomarkerGrid"></div>
+    </aside>
+  </div>
+
+  <footer class="status-bar">
+    <span>P.R.I.S.M.</span>
+    <span id="sbSources">6 sources</span>
+    <span id="sbMarkers">0 markers</span>
+    <span id="sbR">R: inactive</span>
+    <span class="sb-right">Educational & Research Tool — Not for Clinical Use</span>
+  </footer>
+</div>
+
+<script>
+/* ========== BIOMARKER DATA WITH REFERENCES ========== */
+const BIOMARKERS = [
+  { id:'crp', abbrev:'CRP', name:'C-Reactive Protein', category:'Acute Phase Protein', type:'smoke', fireScore:15, sn:0.65, sp:0.76, cutoff:'10 mg/L', peakTime:'12–24h', color:'#e67e22',
+    searchTerms:'C-reactive protein CRP',
+    refNote:'Pooled Sn/Sp from meta-analyses of CRP in neonatal sepsis. Values represent early-onset and late-onset combined.',
+    refs:[ {text:'Hofer et al. — IL-6 and CRP diagnostic accuracy in neonatal sepsis', q:'Hofer 2012 interleukin neonatal sepsis diagnostic accuracy'},
+           {text:'Sharma et al. — CRP in neonatal sepsis: systematic review', q:'Sharma 2018 C-reactive protein neonatal sepsis'} ]},
+  { id:'pct', abbrev:'PCT', name:'Procalcitonin', category:'Prohormone', type:'mixed', fireScore:55, sn:0.81, sp:0.79, cutoff:'0.5–2 ng/mL', peakTime:'2–4h', color:'#c0392b',
+    searchTerms:'procalcitonin PCT',
+    refNote:'Meta-analytic performance. Note: physiologic postnatal surge in first 48h affects early-onset sepsis cutoffs.',
+    refs:[ {text:'Pontrelli et al. 2017 — PCT in neonatal sepsis meta-analysis', q:'Pontrelli 2017 procalcitonin neonatal sepsis meta-analysis'},
+           {text:'Stocker et al. 2017 — NeoPInS: procalcitonin-guided decision making', q:'Stocker 2017 procalcitonin neonatal NeoPInS'} ]},
+  { id:'il6', abbrev:'IL-6', name:'Interleukin-6', category:'Pro-inflammatory Cytokine', type:'smoke', fireScore:25, sn:0.87, sp:0.78, cutoff:'50–100 pg/mL', peakTime:'1–2h', color:'#8e44ad',
+    searchTerms:'interleukin-6 IL-6',
+    refNote:'Earliest available marker. Very short half-life (~1h) means timing relative to infection onset critically affects performance.',
+    refs:[ {text:'Ng & Lam 2006 — Systematic review of IL-6 in neonatal infection', q:'Ng Lam 2006 interleukin-6 neonatal infection systematic review'},
+           {text:'Chiesa et al. 2015 — IL-6 for neonatal sepsis diagnosis', q:'Chiesa 2015 interleukin-6 neonatal sepsis diagnosis'} ]},
+  { id:'il8', abbrev:'IL-8', name:'Interleukin-8 (CXCL8)', category:'Chemokine', type:'smoke', fireScore:22, sn:0.84, sp:0.74, cutoff:'70 pg/mL', peakTime:'1–4h', color:'#6c3483',
+    searchTerms:'interleukin-8 IL-8 CXCL8',
+    refNote:'Neutrophil chemoattractant. Better performance than CRP at time of clinical suspicion due to earlier kinetics.',
+    refs:[ {text:'Franz et al. 2004 — IL-8 for neonatal bacterial infection', q:'Franz 2004 interleukin-8 neonatal bacterial infection'},
+           {text:'Boskabadi et al. 2019 — IL-8 diagnostic value neonatal sepsis', q:'Boskabadi 2019 interleukin-8 neonatal sepsis'} ]},
+  { id:'psep', abbrev:'PSP', name:'Presepsin (sCD14-ST)', category:'Cell Surface Fragment', type:'fire', fireScore:85, sn:0.88, sp:0.82, cutoff:'600–800 pg/mL', peakTime:'2–3h', color:'#c0392b',
+    searchTerms:'presepsin sCD14-ST',
+    refNote:'Released during monocyte phagocytosis of bacteria — directly linked to bacterial engulfment. Among the most infection-specific markers.',
+    refs:[ {text:'Bellos et al. 2018 — Presepsin in neonatal sepsis: meta-analysis', q:'Bellos 2018 presepsin neonatal sepsis meta-analysis'},
+           {text:'Poggi et al. 2015 — Presepsin for early-onset neonatal sepsis', q:'Poggi 2015 presepsin early-onset neonatal sepsis'} ]},
+  { id:'cd64', abbrev:'CD64', name:'Neutrophil CD64', category:'Cell Surface Receptor', type:'fire', fireScore:72, sn:0.83, sp:0.80, cutoff:'>2.3 index', peakTime:'1–6h', color:'#16a085',
+    searchTerms:'neutrophil CD64 nCD64',
+    refNote:'High-affinity Fcγ receptor I. Requires flow cytometry. Performance validated in multiple meta-analyses.',
+    refs:[ {text:'Shi et al. 2016 — CD64 for neonatal sepsis: meta-analysis', q:'Shi 2016 CD64 neonatal sepsis meta-analysis'},
+           {text:'Dimoula et al. 2014 — Neutrophil CD64 in sepsis systematic review', q:'Dimoula 2014 neutrophil CD64 sepsis systematic review'} ]},
+  { id:'saa', abbrev:'SAA', name:'Serum Amyloid A', category:'Acute Phase Protein', type:'smoke', fireScore:18, sn:0.78, sp:0.75, cutoff:'10 mg/L', peakTime:'8–24h', color:'#d35400',
+    searchTerms:'serum amyloid A SAA',
+    refNote:'Hepatic acute phase reactant. Similar profile to CRP. May add incremental value when combined.',
+    refs:[ {text:'Yuan et al. 2013 — SAA in neonatal sepsis', q:'Yuan 2013 serum amyloid neonatal sepsis'},
+           {text:'Arnon et al. 2007 — SAA in neonatal late-onset sepsis', q:'Arnon 2007 serum amyloid neonatal late-onset'} ]},
+  { id:'strem1', abbrev:'sTREM-1', name:'Soluble TREM-1', category:'Innate Immune Receptor', type:'fire', fireScore:68, sn:0.82, sp:0.78, cutoff:'Variable', peakTime:'2–6h', color:'#27ae60',
+    searchTerms:'sTREM-1 soluble TREM',
+    refNote:'Amplifies innate response to bacteria/fungi. Limited but promising neonatal data.',
+    refs:[ {text:'Sarafidis et al. 2012 — sTREM-1 in neonatal sepsis', q:'Sarafidis 2012 sTREM-1 neonatal sepsis'} ]},
+  { id:'ptx3', abbrev:'PTX3', name:'Pentraxin 3', category:'Pattern Recognition', type:'mixed', fireScore:42, sn:0.80, sp:0.73, cutoff:'Variable', peakTime:'6–8h', color:'#2980b9',
+    searchTerms:'pentraxin 3 PTX3',
+    refNote:'Long pentraxin produced locally at inflammation sites. Emerging marker with growing neonatal evidence.',
+    refs:[ {text:'Infante et al. 2019 — Pentraxin 3 in neonatal sepsis', q:'Infante 2019 pentraxin neonatal sepsis'} ]},
+  { id:'lbp', abbrev:'LBP', name:'LPS-Binding Protein', category:'Transfer Protein', type:'fire', fireScore:75, sn:0.77, sp:0.71, cutoff:'Variable', peakTime:'6–12h', color:'#9b59b6',
+    searchTerms:'lipopolysaccharide binding protein LBP',
+    refNote:'Binds bacterial LPS and transfers to CD14/TLR4. High infection specificity but primarily gram-negative.',
+    refs:[ {text:'Pavcnik-Arnol et al. 2007 — LBP in neonatal sepsis', q:'Pavcnik-Arnol 2007 LBP neonatal sepsis'},
+           {text:'Berner et al. 2002 — LBP in neonatal bacterial infection', q:'Berner 2002 lipopolysaccharide binding protein neonatal'} ]},
+  { id:'mbl', abbrev:'MBL', name:'Mannose-Binding Lectin', category:'Collectin / Complement', type:'fire', fireScore:62, sn:0.70, sp:0.68, cutoff:'Variable', peakTime:'Constitutive', color:'#795548',
+    searchTerms:'mannose binding lectin MBL',
+    refNote:'Innate pattern recognition. Genetically polymorphic — 10-30% have low baseline. Better as risk stratifier.',
+    refs:[ {text:'Frakking et al. 2007 — MBL and neonatal susceptibility', q:'Frakking 2007 mannose binding lectin neonatal'},
+           {text:'Ozdemir et al. 2010 — MBL and neonatal sepsis', q:'Ozdemir 2010 MBL neonatal sepsis'} ]},
+  { id:'dlac', abbrev:'D-LAC', name:'D-Lactate', category:'Bacterial Metabolite', type:'fire', fireScore:78, sn:0.73, sp:0.69, cutoff:'Variable', peakTime:'Variable', color:'#e65100',
+    searchTerms:'D-lactate bacterial',
+    refNote:'EXPERIMENTAL. Product of bacterial metabolism — mammals produce only L-lactate. Conceptually compelling but insufficiently validated in neonates.',
+    refs:[ {text:'Ewaschuk et al. 2005 — D-lactate in disease', q:'Ewaschuk 2005 D-lactate disease'},
+           {text:'Sun et al. — D-lactate as sepsis biomarker', q:'D-lactate bacterial sepsis biomarker'} ]},
+  { id:'proadm', abbrev:'proADM', name:'Proadrenomedullin', category:'Vasoactive Precursor', type:'mixed', fireScore:38, sn:0.76, sp:0.72, cutoff:'Variable', peakTime:'3–6h', color:'#607d8b',
+    searchTerms:'proadrenomedullin MR-proADM',
+    refNote:'Endothelial activation marker. Better prognostic than diagnostic. Rises with any microcirculatory dysfunction.',
+    refs:[ {text:'Stocker et al. 2010 — Proadrenomedullin in neonatal sepsis', q:'Stocker 2010 proadrenomedullin neonatal sepsis'} ]}
+];
+
+const GENE_MAP = {crp:'CRP',pct:'CALCA',il6:'IL6',il8:'CXCL8',psep:'CD14',cd64:'FCGR1A',saa:'SAA1',strem1:'TREM1',ptx3:'PTX3',lbp:'LBP',mbl:'MBL2',dlac:null,proadm:'ADM'};
+
+/* ========== STATE ========== */
+const state = { selected: new Set(), rocChart: null, fireGauge: null, webR: null, rReady: false };
+let searchTimeout;
+
+/* ========== MATH ========== */
+function normCDF(x){if(x<-8)return 0;if(x>8)return 1;const a1=.31938153,a2=-.35656378,a3=1.78147794,a4=-1.82125598,a5=1.33027443,p=.2316419,t=1/(1+p*Math.abs(x)),z=Math.exp(-.5*x*x)/Math.sqrt(2*Math.PI),y=1-z*(a1*t+a2*t*t+a3*t*t*t+a4*t*t*t*t+a5*t*t*t*t*t);return x>=0?y:1-y}
+function normInvCDF(p){if(p<=1e-4)return-3.7;if(p>=.9999)return 3.7;if(p<.5)return-normInvCDF(1-p);const t=Math.sqrt(-2*Math.log(1-p));return t-(2.515517+.802853*t+.010328*t*t)/(1+1.432788*t+.189269*t*t+.001308*t*t*t)}
+function computeDA(sn,sp){return normInvCDF(sn)+normInvCDF(sp)}
+function generateROC(da,n){n=n||60;const p=[];for(let i=0;i<=n;i++){const f=i/n;p.push({x:f,y:normCDF(da+normInvCDF(Math.max(1e-4,Math.min(.9999,f))))})}return p}
+function computeAUC(da){return normCDF(da/Math.sqrt(2))}
+function optimalPoint(da){const s=normCDF(da/2);return{sn:s,sp:s}}
+function bayesPost(pre,lr){const o=(pre/(1-pre))*lr;return o/(1+o)}
+
+/* ========== RENDER BIOMARKER CARDS ========== */
+function renderBiomarkerCards(){
+  document.getElementById('biomarkerGrid').innerHTML=BIOMARKERS.map(bm=>{
+    const auc=computeAUC(computeDA(bm.sn,bm.sp));
+    const fc=bm.fireScore>60?'var(--accent-fire)':bm.fireScore>35?'var(--accent-purple)':'var(--accent-smoke)';
+    return `<div class="biomarker-card" data-id="${bm.id}" data-type="${bm.type}" onclick="toggleMarker('${bm.id}')">
+      <div class="bm-check">✓</div>
+      <div class="bm-row1"><span class="bm-abbrev">${bm.abbrev}</span><span class="bm-type-badge ${bm.type}">${bm.type}</span></div>
+      <div class="bm-name">${bm.name}</div>
+      <div class="bm-stats-row">Sn ${(bm.sn*100).toFixed(0)}% · Sp ${(bm.sp*100).toFixed(0)}% · AUC ${auc.toFixed(2)} · ${bm.peakTime}</div>
+      <div class="bm-fire-mini"><div class="bm-fire-mini-fill" style="width:${bm.fireScore}%;background:${fc}"></div></div>
+    </div>`}).join('');
+}
+
+function toggleMarker(id){
+  if(state.selected.has(id))state.selected.delete(id);else state.selected.add(id);
+  document.querySelectorAll('.biomarker-card').forEach(c=>c.classList.toggle('selected',state.selected.has(c.dataset.id)));
+  document.getElementById('selectedCount').textContent=state.selected.size+' selected';
+  document.getElementById('sbMarkers').textContent=state.selected.size+' markers';
+  updateRefs();
+  updateGodParticle();
+  updateSTRINGNetwork();
+  syncMarkersToR();
+  scheduleContextSearch();
+  setAgentStatus('agent-analyst',state.selected.size>0?'active':'');
+  setAgentStatus('agent-bayesian',state.selected.size>1?'active':'');
+}
+
+function filterMarkers(type,btn){
+  document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.biomarker-card').forEach(c=>{c.style.display=(type==='all'||c.dataset.type===type)?'':'none'});
+}
+
+/* ========== CONTEXT-AWARE SEARCH ========== */
+function getContextQuery(){
+  const sel=[...state.selected].map(id=>BIOMARKERS.find(b=>b.id===id)).filter(Boolean);
+  if(!sel.length) return 'neonatal sepsis biomarker';
+  const terms=sel.map(b=>`"${b.searchTerms}"`).join(' OR ');
+  return `(${terms}) neonatal sepsis`;
+}
+
+function scheduleContextSearch(){
+  clearTimeout(searchTimeout);
+  searchTimeout=setTimeout(()=>{
+    const q=getContextQuery();
+    document.getElementById('searchQuery').value=q;
+    const label=document.getElementById('contextLabel');
+    if(state.selected.size>0){
+      const names=[...state.selected].map(id=>BIOMARKERS.find(b=>b.id===id)?.abbrev).filter(Boolean);
+      label.textContent=names.join(' + ');
+    } else { label.textContent=''; }
+    runPipeline();
+  },800);
+}
+
+/* ========== REFERENCES PANEL ========== */
+function updateRefs(){
+  const panel=document.getElementById('refsPanel');
+  const sel=[...state.selected].map(id=>BIOMARKERS.find(b=>b.id===id)).filter(Boolean);
+  const countEl=document.getElementById('refCount');
+  if(!sel.length){panel.innerHTML='<div class="ref-empty">Select biomarkers to see source references</div>';countEl.textContent='';return}
+  countEl.textContent=sel.length;
+  panel.innerHTML=sel.map(bm=>`<div class="ref-group">
+    <div class="ref-marker">${bm.abbrev} — ${bm.name}</div>
+    <div class="ref-note">${bm.refNote}</div>
+    ${bm.refs.map(r=>`<a class="ref-link" href="https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(r.q)}" target="_blank" rel="noopener">${r.text}</a>`).join('')}
+  </div>`).join('');
+}
+
+/* ========== GOD PARTICLE ========== */
+function updateGodParticle(){
+  const gpGrid=document.getElementById('gpGrid'),gpSection=document.getElementById('godParticle');
+  const sel=[...state.selected].map(id=>BIOMARKERS.find(b=>b.id===id)).filter(Boolean);
+  if(!sel.length){gpGrid.innerHTML='<div class="gp-empty"><div class="gp-empty-icon">🔬</div>Select biomarkers to begin analysis</div>';gpSection.classList.remove('achieved');return}
+  const das=sel.map(b=>computeDA(b.sn,b.sp)),cd=Math.sqrt(das.reduce((s,d)=>s+d*d,0));
+  const auc=computeAUC(cd),opt=optimalPoint(cd),lrP=opt.sn/(1-opt.sp),lrN=(1-opt.sn)/opt.sp;
+  const af=sel.reduce((s,b)=>s+b.fireScore,0)/sel.length;
+  gpSection.classList.toggle('achieved',auc>=0.95);
+  gpGrid.innerHTML=`
+    <div class="roc-panel"><canvas id="rocCanvas"></canvas></div>
+    <div class="metrics-panel">
+      <div class="metric-card"><span class="metric-label">Sensitivity</span><span class="metric-value">${(opt.sn*100).toFixed(1)}%</span></div>
+      <div class="metric-card"><span class="metric-label">Specificity</span><span class="metric-value">${(opt.sp*100).toFixed(1)}%</span></div>
+      <div class="metric-card"><span class="metric-label">AUC</span><span class="metric-value">${auc.toFixed(3)}</span></div>
+      <div class="metric-card"><span class="metric-label">LR+</span><span class="metric-value">${lrP.toFixed(1)}</span></div>
+      <div class="metric-card"><span class="metric-label">LR−</span><span class="metric-value">${lrN.toFixed(3)}</span></div>
+      <div class="metric-card"><span class="metric-label">Markers</span><span class="metric-value">${sel.length}</span></div>
+    </div>
+    <div class="prob-engine">
+      <h3>Probability Engine</h3>
+      <div class="prob-left">
+        <div class="slider-group"><label>Pre-test probability <span id="preVal">25%</span></label><input type="range" id="preSlider" min="1" max="99" value="25" oninput="updateProb()"></div>
+        <div class="post-test-results">
+          <div class="post-test-card positive"><span class="post-label">If positive</span><span class="post-value" id="postPos">—</span></div>
+          <div class="post-test-card negative"><span class="post-label">If negative</span><span class="post-value" id="postNeg">—</span></div>
+        </div>
+      </div>
+      <div class="prob-right">
+        <div class="fire-gauge-wrap"><canvas id="fireCanvas"></canvas>
+          <div class="gauge-value" id="gaugeVal" style="color:${af>50?'var(--accent-fire)':'var(--accent-smoke)'}">${af.toFixed(0)}</div>
+          <div class="gauge-label">Fire Score</div>
+        </div>
+      </div>
+    </div>`;
+  drawROC(sel,cd);drawFireGauge(af);updateProb();
+}
+
+function drawROC(sel,cd){
+  const ctx=document.getElementById('rocCanvas');if(!ctx)return;
+  const ds=[{label:'Random (0.50)',data:[{x:0,y:0},{x:1,y:1}],borderColor:'#e2e8f0',borderDash:[6,4],showLine:true,pointRadius:0,borderWidth:1}];
+  sel.forEach(bm=>{const da=computeDA(bm.sn,bm.sp);ds.push({label:`${bm.abbrev} (${computeAUC(da).toFixed(2)})`,data:generateROC(da),borderColor:bm.color+'88',showLine:true,pointRadius:0,borderWidth:1.5,tension:0.3})});
+  if(sel.length>1)ds.push({label:`Combined (${computeAUC(cd).toFixed(3)})`,data:generateROC(cd),borderColor:'#0369a1',showLine:true,pointRadius:0,borderWidth:3,tension:0.3});
+  if(state.rocChart)state.rocChart.destroy();
+  state.rocChart=new Chart(ctx,{type:'scatter',data:{datasets:ds},options:{responsive:true,maintainAspectRatio:false,animation:{duration:500},
+    scales:{x:{min:0,max:1,title:{display:true,text:'1 − Specificity',color:'#64748b',font:{size:10}},ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'#f1f5f9'}},
+            y:{min:0,max:1,title:{display:true,text:'Sensitivity',color:'#64748b',font:{size:10}},ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'#f1f5f9'}}},
+    plugins:{legend:{position:'bottom',labels:{color:'#64748b',font:{size:9},boxWidth:12,padding:8}}}}});
+}
+
+function drawFireGauge(score){
+  const ctx=document.getElementById('fireCanvas');if(!ctx)return;
+  if(state.fireGauge)state.fireGauge.destroy();
+  const c=score>60?'#c2410c':score>40?'#6d28d9':'#64748b';
+  state.fireGauge=new Chart(ctx,{type:'doughnut',data:{datasets:[{data:[score,100-score],backgroundColor:[c,'#f1f5f9'],borderWidth:0}]},
+    options:{circumference:180,rotation:270,cutout:'78%',responsive:true,maintainAspectRatio:true,animation:{duration:600},plugins:{legend:{display:false},tooltip:{enabled:false}}}});
+}
+
+function updateProb(){
+  const sl=document.getElementById('preSlider'),pv=document.getElementById('preVal');if(!sl||!pv)return;
+  const pre=parseInt(sl.value)/100;pv.textContent=sl.value+'%';
+  const sel=[...state.selected].map(id=>BIOMARKERS.find(b=>b.id===id)).filter(Boolean);if(!sel.length)return;
+  const das=sel.map(b=>computeDA(b.sn,b.sp)),cd=Math.sqrt(das.reduce((s,d)=>s+d*d,0)),opt=optimalPoint(cd);
+  const pp=document.getElementById('postPos'),pn=document.getElementById('postNeg');
+  if(pp)pp.textContent=(bayesPost(pre,opt.sn/(1-opt.sp))*100).toFixed(1)+'%';
+  if(pn)pn.textContent=(bayesPost(pre,(1-opt.sn)/opt.sp)*100).toFixed(1)+'%';
+}
+
+/* ========== APIs ========== */
+async function fetchPubMed(q){
+  setAgentStatus('agent-lit','active');setSourceStatus('pubmed','streaming','...');
+  try{const sr=await(await fetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(q)}&retmax=15&retmode=json&sort=date`)).json();
+  const ids=sr.esearchresult?.idlist||[];if(!ids.length){renderFeed('pubmedFeed',[]);setSourceStatus('pubmed','','0');setAgentStatus('agent-lit','complete');return}
+  const sd=await(await fetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${ids.join(',')}&retmode=json`)).json();
+  const a=ids.map(id=>{const i=sd.result?.[id];return i?{title:i.title,authors:i.authors?.slice(0,3).map(a=>a.name).join(', ')||'',source:i.source||'',date:i.pubdate||'',url:`https://pubmed.ncbi.nlm.nih.gov/${id}/`}:null}).filter(Boolean);
+  renderFeed('pubmedFeed',a);setSourceStatus('pubmed','streaming',a.length+'');document.getElementById('pubmedCount').textContent=a.length;setAgentStatus('agent-lit','complete');
+  }catch(e){document.getElementById('pubmedFeed').innerHTML='<div class="feed-error">PubMed connection failed</div>';setSourceStatus('pubmed','error','err');setAgentStatus('agent-lit','error')}}
+
+async function fetchTrials(q){
+  setAgentStatus('agent-trials','active');setSourceStatus('trials','streaming','...');
+  try{const d=await(await fetch(`https://clinicaltrials.gov/api/v2/studies?query.term=${encodeURIComponent(q)}&pageSize=15&sort=LastUpdatePostDate`)).json();
+  const s=(d.studies||[]).map(s=>{const p=s.protocolSection||{},id=p.identificationModule||{},st=p.statusModule||{},ds=p.designModule||{};return{title:id.briefTitle||id.officialTitle||'',nctId:id.nctId||'',status:st.overallStatus||'',phase:ds.phases?.join(', ')||'N/A',url:`https://clinicaltrials.gov/study/${id.nctId||''}`}});
+  renderTrials('trialsFeed',s);setSourceStatus('trials','streaming',s.length+'');document.getElementById('trialsCount').textContent=s.length;setAgentStatus('agent-trials','complete');
+  }catch(e){document.getElementById('trialsFeed').innerHTML='<div class="feed-error">Trials connection failed</div>';setSourceStatus('trials','error','err');setAgentStatus('agent-trials','error')}}
+
+async function fetchEuropePMC(q){setSourceStatus('epmc','streaming','...');try{const d=await(await fetch(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(q)}&resultType=lite&pageSize=10&format=json`)).json();setSourceStatus('epmc','streaming',(d.hitCount||0)+'+')}catch(e){setSourceStatus('epmc','error','err')}}
+async function fetchUniProt(q){setSourceStatus('uniprot','streaming','...');try{const d=await(await fetch(`https://rest.uniprot.org/uniprotkb/search?query=${encodeURIComponent(q+' AND organism_id:9606')}&size=5&format=json`)).json();setSourceStatus('uniprot','streaming',(d.results?.length||0)+'')}catch(e){setSourceStatus('uniprot','error','err')}}
+
+async function fetchGEO(q){
+  setSourceStatus('geo','streaming','...');
+  try{const sr=await(await fetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=gds&term=${encodeURIComponent(q+' AND gds[Filter]')}&retmax=10&retmode=json&sort=date`)).json();
+  const ids=sr.esearchresult?.idlist||[];if(!ids.length){document.getElementById('geoFeed').innerHTML='<div class="feed-loading">No datasets found</div>';setSourceStatus('geo','','0');return}
+  const sd=await(await fetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=gds&id=${ids.join(',')}&retmode=json`)).json();
+  const ds=ids.map(id=>{const i=sd.result?.[id];if(!i)return null;const acc=i.accession||'';return{title:i.title||'',accession:acc,organism:i.taxon||'',platform:i.gpl||'',samples:i.n_samples||0,type:i.entrytype||'',summary:(i.summary||'').substring(0,140),url:acc.startsWith('GDS')?`https://www.ncbi.nlm.nih.gov/sites/GDSbrowser?acc=${acc}`:`https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${acc}`}}).filter(Boolean);
+  renderGEO(ds);setSourceStatus('geo','streaming',ds.length+'');document.getElementById('geoCount').textContent=ds.length;
+  }catch(e){document.getElementById('geoFeed').innerHTML='<div class="feed-error">GEO connection failed</div>';setSourceStatus('geo','error','err')}}
+
+function updateSTRINGNetwork(){
+  const panel=document.getElementById('stringPanel'),genes=[...state.selected].map(id=>GENE_MAP[id]).filter(Boolean);
+  if(genes.length<2){panel.innerHTML='<div class="string-placeholder">Select 2+ biomarkers to see protein network</div>';setSourceStatus('string','','—');document.getElementById('stringCount').textContent='';return}
+  setSourceStatus('string','streaming',genes.length+'');document.getElementById('stringCount').textContent=genes.length;
+  panel.innerHTML=`<img src="https://string-db.org/api/image/network?identifiers=${genes.join('%0d')}&species=9606&network_type=functional&required_score=400&add_white_nodes=2" alt="STRING" onerror="this.parentElement.innerHTML='<div class=\\'string-placeholder\\'>STRING unavailable</div>'" onload="setSourceStatus('string','streaming','${genes.length}')">`;
+}
+
+/* ========== RENDER HELPERS ========== */
+function renderFeed(id,arts){const el=document.getElementById(id);if(!arts.length){el.innerHTML='<div class="feed-loading">No results</div>';return}el.innerHTML=arts.map(a=>`<div class="feed-item"><div class="feed-item-title"><a href="${a.url}" target="_blank">${a.title}</a></div><div class="feed-item-meta">${a.authors} — ${a.source} ${a.date}</div></div>`).join('')}
+function renderTrials(id,studies){const el=document.getElementById(id);if(!studies.length){el.innerHTML='<div class="feed-loading">No studies</div>';return}el.innerHTML=studies.map(s=>`<div class="feed-item"><div class="feed-item-title"><a href="${s.url}" target="_blank">${s.title}</a></div><div class="feed-item-meta">${s.nctId} — ${s.status} — ${s.phase}</div></div>`).join('')}
+function renderGEO(ds){const el=document.getElementById('geoFeed');if(!ds.length){el.innerHTML='<div class="feed-loading">No datasets</div>';return}el.innerHTML=ds.map(d=>`<div class="geo-dataset"><div class="geo-title"><a href="${d.url}" target="_blank">${d.title}</a></div><div class="geo-meta">${d.accession} — ${d.organism} — ${d.samples} samples</div>${d.summary?`<div class="geo-meta">${d.summary}...</div>`:''}<div class="geo-tags">${d.accession?`<span class="geo-tag">${d.accession}</span>`:''}${d.platform?`<span class="geo-tag">GPL${d.platform}</span>`:''}${d.type?`<span class="geo-tag">${d.type}</span>`:''}</div></div>`).join('')}
+
+/* ========== UI HELPERS ========== */
+function setAgentStatus(id,s){const el=document.getElementById(id);if(!el)return;el.classList.remove('active','complete','error');if(s)el.classList.add(s)}
+function setSourceStatus(k,css,txt){const b=document.getElementById('src-'+k),s=document.getElementById('status-'+k);if(b){b.classList.remove('streaming','error');if(css)b.classList.add(css)}if(s)s.textContent=txt}
+function toggleAcc(btn){btn.classList.toggle('open');const body=btn.nextElementSibling;body.classList.toggle('open')}
+function switchTab(panel,btn,targetId){
+  const c=panel==='center'?document.querySelector('.center-panel'):document.getElementById('leftPanel');
+  c.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));c.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');document.getElementById(targetId).classList.add('active');
+  if(targetId==='ctab-analysis'&&state.rocChart)setTimeout(()=>state.rocChart.resize(),50);
+}
+
+/* ========== WebR INTEGRATION ========== */
+async function initWebR(){
+  const statusEl=document.getElementById('rStatus');
+  const consoleEl=document.getElementById('rConsole');
+  const activateBtn=document.getElementById('activateBtn');
+  const runBtn=document.getElementById('runBtn');
+  statusEl.textContent='Loading R runtime...';statusEl.className='r-status loading';
+  activateBtn.disabled=true;activateBtn.textContent='Loading...';
+  document.getElementById('sbR').textContent='R: loading...';
+  consoleEl.innerHTML='<span class="r-info">Downloading WebR runtime (~20MB)...\nThis is cached after first load.\n</span>';
+  try{
+    const{WebR}=await import('https://webr.r-wasm.org/latest/webr.mjs');
+    state.webR=new WebR();await state.webR.init();
+    state.rReady=true;
+    statusEl.textContent='R ready';statusEl.className='r-status ready';
+    activateBtn.style.display='none';runBtn.disabled=false;
+    document.getElementById('sbR').textContent='R: ready';
+    consoleEl.innerHTML='<span class="r-info">R runtime loaded successfully.\nSelected biomarkers auto-sync as the \'markers\' data frame.\nWrite code above and click Run.\n</span>';
+    syncMarkersToR();
+  }catch(e){
+    statusEl.textContent='R failed to load';statusEl.className='r-status';
+    activateBtn.disabled=false;activateBtn.textContent='Retry';
+    document.getElementById('sbR').textContent='R: error';
+    consoleEl.innerHTML+=`\n<span class="r-err">Error: ${e.message}\nMake sure you have internet access. WebR requires modern browser.</span>`;
+  }
+}
+
+async function syncMarkersToR(){
+  if(!state.rReady||!state.webR)return;
+  const sel=[...state.selected].map(id=>BIOMARKERS.find(b=>b.id===id)).filter(Boolean);
+  if(!sel.length){
+    try{await state.webR.evalRVoid('markers <- data.frame(id=character(0),name=character(0),sn=numeric(0),sp=numeric(0),fire_score=numeric(0),da=numeric(0),auc=numeric(0),lr_pos=numeric(0),lr_neg=numeric(0),stringsAsFactors=FALSE)')}catch(e){}
+    return;
+  }
+  const code=`markers <- data.frame(
+  id=c(${sel.map(b=>`"${b.id}"`).join(',')}),
+  name=c(${sel.map(b=>`"${b.abbrev}"`).join(',')}),
+  sn=c(${sel.map(b=>b.sn).join(',')}),
+  sp=c(${sel.map(b=>b.sp).join(',')}),
+  fire_score=c(${sel.map(b=>b.fireScore).join(',')}),
+  stringsAsFactors=FALSE)
+markers$da<-qnorm(markers$sn)+qnorm(markers$sp)
+markers$auc<-pnorm(markers$da/sqrt(2))
+markers$lr_pos<-markers$sn/(1-markers$sp)
+markers$lr_neg<-(1-markers$sn)/markers$sp`;
+  try{await state.webR.evalRVoid(code)}catch(e){console.error('Sync error:',e)}
+}
+
+async function executeR(){
+  if(!state.rReady)return;
+  const code=document.getElementById('rEditor').value;
+  const consoleEl=document.getElementById('rConsole');
+  consoleEl.innerHTML+='<span class="r-info">\n> Running...\n</span>';
+  try{
+    const shelter=await new state.webR.Shelter();
+    const result=await shelter.captureR(code,{withAutoprint:true});
+    let output='';
+    for(const msg of result.output){
+      if(msg.type==='stdout')output+=msg.data+'\n';
+      else if(msg.type==='stderr')output+='<span class="r-err">'+msg.data+'</span>\n';
+    }
+    consoleEl.innerHTML+=(output||'<span class="r-info">(no output)</span>\n');
+    shelter.purge();
+  }catch(e){consoleEl.innerHTML+=`<span class="r-err">Error: ${e.message}</span>\n`}
+  consoleEl.scrollTop=consoleEl.scrollHeight;
+}
+
+/* ========== RESIZE ========== */
+function initResize(){
+  document.querySelectorAll('.resize-handle').forEach(h=>{
+    h.addEventListener('mousedown',e=>{
+      e.preventDefault();const isL=h.dataset.target==='left';
+      const p=isL?document.getElementById('leftPanel'):document.getElementById('rightPanel');
+      const sx=e.clientX,sw=p.offsetWidth;h.classList.add('dragging');
+      document.body.style.cursor='col-resize';document.body.style.userSelect='none';
+      const mv=e=>{const d=isL?(e.clientX-sx):(sx-e.clientX);p.style.width=Math.max(200,Math.min(500,sw+d))+'px'};
+      const up=()=>{h.classList.remove('dragging');document.body.style.cursor='';document.body.style.userSelect='';
+        document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);
+        if(state.rocChart)setTimeout(()=>state.rocChart.resize(),50)};
+      document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);
+    });
+  });
+}
+
+/* ========== PIPELINE ========== */
+async function runPipeline(){
+  const q=document.getElementById('searchQuery').value.trim()||'neonatal sepsis biomarker';
+  await Promise.allSettled([fetchPubMed(q),fetchTrials(q),fetchEuropePMC(q),fetchUniProt(q),fetchGEO(q)]);
+  updateSTRINGNetwork();
+}
+
+/* ========== INIT ========== */
+document.addEventListener('DOMContentLoaded',()=>{
+  renderBiomarkerCards();
+  initResize();
+  setTimeout(()=>runPipeline(),400);
+});
+</script>
+</body>
+</html>
